@@ -27,9 +27,9 @@ local function defaultPaymentMethod(playerId, price)
 
 	if success then return true end
 
-	local money = ox_inventory:GetItemCount(source, 'money')
+	local money = ox_inventory:GetItemCount(playerId, 'money')
 
-	TriggerClientEvent('ox_lib:notify', source, {
+	TriggerClientEvent('ox_lib:notify', playerId, {
 		type = 'error',
 		description = locale('not_enough_money', price - money)
 	})
@@ -88,6 +88,30 @@ RegisterNetEvent('ox_fuel:fuelCan', function(hasCan, price)
 			description = locale('petrolcan_buy', price)
 		})
 	end
+end)
+
+RegisterNetEvent('ox_fuel:payElectric', function(price, fuel, netid)
+	assert(type(price) == 'number', ('Price expected a number, received %s'):format(type(price)))
+	local source = source
+
+	if not payMoney(source, price) then return end
+
+	fuel = math.floor(fuel)
+	setFuelState(netid, fuel)
+
+	-- Set vehicle charging state to false after completion
+	local vehicle = NetworkGetEntityFromNetworkId(netid)
+	if vehicle ~= 0 then
+		local state = Entity(vehicle)?.state
+		if state then
+			state:set('isCharging', false, true)
+		end
+	end
+
+	TriggerClientEvent('ox_lib:notify', source, {
+		type = 'success',
+		description = locale('electric_charge_success', fuel, price) or ('Vehicle charged to %s%% for $%s'):format(fuel, price)
+	})
 end)
 
 RegisterNetEvent('ox_fuel:updateFuelCan', function(durability, netid, fuel)

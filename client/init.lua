@@ -16,15 +16,34 @@ local fuel  = require 'client.fuel'
 
 require 'client.stations'
 
+-- Load electric charging system
+require 'client.electric'
+
 local function startDrivingVehicle()
 	local vehicle = cache.vehicle
 
-	if not DoesVehicleUseFuel(vehicle) then return end
+	-- GTA V natives report many electric vehicles as not using fuel; we still need to
+	-- initialize a 'fuel' (charge) state for them so Entity(vehicle).state.fuel isn't nil.
+	-- Allow electric vehicles past this guard.
+	if not DoesVehicleUseFuel(vehicle) and not utils.isElectricVehicle(vehicle) then return end
 
 	local vehState = Entity(vehicle).state
 
 	if not vehState.fuel then
-		vehState:set('fuel', GetVehicleFuelLevel(vehicle), true)
+		local currentFuel = GetVehicleFuelLevel(vehicle)
+		local defaultLevel
+
+		-- Check if this is an electric vehicle
+		if utils.isElectricVehicle(vehicle) then
+			-- For electric vehicles, use default electric level if fuel is very low (newly spawned)
+			defaultLevel = currentFuel <= 5.0 and config.defaultElectricLevel or currentFuel
+		else
+			-- For regular vehicles, use default fuel level if fuel is very low (newly spawned)
+			defaultLevel = currentFuel <= 5.0 and config.defaultFuelLevel or currentFuel
+		end
+
+		vehState:set('fuel', defaultLevel, true)
+		SetVehicleFuelLevel(vehicle, defaultLevel)
 		while not vehState.fuel do Wait(0) end
 	end
 
@@ -35,22 +54,57 @@ local function startDrivingVehicle()
 	while cache.seat == -1 do
 		if GetIsVehicleEngineRunning(vehicle) then
 			if not DoesEntityExist(vehicle) then return end
-			SetFuelConsumptionRateMultiplier(config.globalFuelConsumptionRate)
 
-			local fuelAmount = tonumber(vehState.fuel)
-			local newFuel = GetVehicleFuelLevel(vehicle)
-			if fuelAmount > 0 then
-				if GetVehiclePetrolTankHealth(vehicle) < 700 then
-					newFuel -= math.random(10, 20) * 0.01
-				end
-
-				if fuelAmount ~= newFuel then
-					if fuelTick == 15 then
+			local isElectric = utils.isElectricVehicle(vehicle)
+			if isElectric then
+				-- Custom electric consumption logic (battery drain)
+				-- We disable native consumption so we control it manually
+				SetFuelConsumptionRateMultiplier(0.0)
+				local charge = tonumber(vehState.fuel) or GetVehicleFuelLevel(vehicle)
+				if charge > 0 then
+					-- Base drain scaled by configured electric rate
+					local speed = GetEntitySpeed(vehicle) * 3.6 -- kph
+					local drain = (config.electricConsumptionRate / 600.0) -- base hourly-ish divisor
+					-- Add speed influence
+					drain += (speed / math.max(config.electricSpeedFactor, 1.0)) * 0.02
+					-- Extra drain if vehicle health poor (simulate inefficiency)
+					if GetVehicleEngineHealth(vehicle) < 800.0 then
+						drain += 0.015
+					end
+					charge -= drain
+					if charge < 0 then charge = 0 end
+					-- Replicate every 15s; update natives each tick
+					if fuelTick == 15 or charge == 0 then
+						fuel.setFuel(vehState, vehicle, charge, true)
 						fuelTick = 0
+					else
+						SetVehicleFuelLevel(vehicle, charge)
+						vehState:set('fuel', charge, false)
+						fuelTick += 1
+					end
+					-- Force engine off when depleted / below cutoff
+					if charge <= (config.electricEngineCutoff or 0.5) then
+						SetVehicleEngineOn(vehicle, false, true, true)
+					end
+				end
+			else
+				SetFuelConsumptionRateMultiplier(config.globalFuelConsumptionRate)
+
+				local fuelAmount = tonumber(vehState.fuel)
+				local newFuel = GetVehicleFuelLevel(vehicle)
+				if fuelAmount > 0 then
+					if GetVehiclePetrolTankHealth(vehicle) < 700 then
+						newFuel -= math.random(10, 20) * 0.01
 					end
 
-					fuel.setFuel(vehState, vehicle, newFuel, fuelTick == 0)
-					fuelTick += 1
+					if fuelAmount ~= newFuel then
+						if fuelTick == 15 then
+							fuelTick = 0
+						end
+
+						fuel.setFuel(vehState, vehicle, newFuel, fuelTick == 0)
+						fuelTick += 1
+					end
 				end
 			end
 		else

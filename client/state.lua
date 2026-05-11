@@ -3,9 +3,15 @@
 ---@field isFueling boolean
 ---@field nearestPump vector3?
 ---@field lastVehicle number?
+---@field hasGasNozzle boolean
+---@field gasNozzleObject number?
+---@field gasNozzleStartCoords vector3?
 local state = {
 	isFueling = false,
-	lastVehicle = cache.vehicle or GetPlayersLastVehicle()
+	lastVehicle = cache.vehicle or GetPlayersLastVehicle(),
+	hasGasNozzle = false,
+	gasNozzleObject = nil,
+	gasNozzleStartCoords = nil,
 }
 
 if state.lastVehicle == 0 then state.lastVehicle = nil end

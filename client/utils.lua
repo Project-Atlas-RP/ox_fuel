@@ -1,4 +1,5 @@
 local utils = {}
+local config = require 'config'
 
 ---@param coords vector3
 ---@return integer
@@ -50,6 +51,22 @@ function utils.getVehiclePetrolCapBoneIndex(vehicle)
 	end
 end
 
+---@param vehicle integer
+---@return boolean
+function utils.isElectricVehicle(vehicle)
+	if not DoesEntityExist(vehicle) then return false end
+	local model = GetEntityModel(vehicle)
+	return config.electricModels[model] == true
+end
+
+---@param vehicle integer
+---@return boolean
+function utils.isFuelDisabled(vehicle)
+	if not DoesEntityExist(vehicle) then return false end
+	local noFuelModels = config.nofuelModels or {}
+	return noFuelModels[GetEntityModel(vehicle)] == true
+end
+
 ---@return number
 local function defaultMoneyCheck()
 	return exports.ox_inventory:GetItemCount('money')
@@ -59,6 +76,14 @@ utils.getMoney = defaultMoneyCheck
 
 exports('setMoneyCheck', function(fn)
 	utils.getMoney = fn or defaultMoneyCheck
+end)
+
+exports('isElectricVehicle', function(vehicle)
+	return utils.isElectricVehicle(vehicle)
+end)
+
+exports('isFuelDisabled', function(vehicle)
+	return utils.isFuelDisabled(vehicle)
 end)
 
 return utils
