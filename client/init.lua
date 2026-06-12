@@ -42,7 +42,9 @@ local function startDrivingVehicle()
 			defaultLevel = currentFuel <= 5.0 and config.defaultFuelLevel or currentFuel
 		end
 
-		vehState:set('fuel', defaultLevel, true)
+		-- Atlas: route the initial level through the server event (strict statebags
+		-- reject client-side vehState writes) but keep the local level immediate.
+		TriggerServerEvent('ox_fuel:setFuel', defaultLevel)
 		SetVehicleFuelLevel(vehicle, defaultLevel)
 		while not vehState.fuel do Wait(0) end
 	end
